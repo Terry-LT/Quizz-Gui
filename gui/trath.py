@@ -12,7 +12,7 @@ try:
 except Exception:
     raise RuntimeError("Pillow is required. Install with: pip install pillow")
 
-APP_TITLE = "Quiz GUI (with images)"
+APP_TITLE = "Quiz GUI"
 
 def read_csv_questions(path):
     """
