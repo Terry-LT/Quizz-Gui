@@ -21,7 +21,7 @@ def read_csv_questions(path):
       - Question Title
       - Choices            (comma-separated texts)
       - Correct Answer(s)  (comma-separated texts, matching choice text)
-      - Image Full Path    (optional, full path to image file; empty if none)
+      - Image Full Path    (optional, full path or relative path to image file; empty if none)
     """
     df = pd.read_csv(path, encoding="utf-8", sep=",")
     questions = []
@@ -66,6 +66,9 @@ class QuizApp(tk.Tk):
         self.index = 0
         self.score = 0
         self.answered_count = 0
+
+        # Folder where the opened CSV resides (used to resolve relative image paths)
+        self.csv_dir = None
 
         # Keep a reference to PhotoImage to avoid being GC'd
         self._photo_image_ref = None
@@ -140,6 +143,9 @@ class QuizApp(tk.Tk):
         if not path:
             return
         try:
+            # Save CSV directory for resolving relative image paths
+            self.csv_dir = os.path.dirname(os.path.abspath(path))
+
             self.questions_original = read_csv_questions(path)
             if len(self.questions_original) == 0:
                 messagebox.showwarning(APP_TITLE, "No questions found in file.")
@@ -181,6 +187,39 @@ class QuizApp(tk.Tk):
         self.progress['value'] = 0
         self.lbl_score.config(text=f"Score: {self.score}")
 
+    def _resolve_image_path(self, img_path_raw: str) -> str:
+        """
+        Resolve an image path from CSV:
+         - expand ~
+         - strip quotes and whitespace
+         - if absolute -> return normalized absolute path
+         - if relative -> resolve relative to CSV folder (if available), otherwise to cwd
+         - return normalized path (or empty string if input empty)
+        """
+        if not img_path_raw:
+            return ""
+
+        # Remove surrounding quotes and whitespace
+        img_path = img_path_raw.strip().strip('\'"').strip()
+
+        # Expand user (~)
+        img_path = os.path.expanduser(img_path)
+
+        # Normalize separators (good for cross-platform)
+        img_path = os.path.normpath(img_path)
+
+        # If it's absolute, use it
+        if os.path.isabs(img_path):
+            return os.path.abspath(img_path)
+
+        # If CSV folder is known, resolve relative to it
+        if self.csv_dir:
+            candidate = os.path.join(self.csv_dir, img_path)
+            return os.path.abspath(candidate)
+
+        # Fallback: resolve relative to current working directory
+        return os.path.abspath(img_path)
+
     def show_question(self):
         q = self.questions[self.index]
         self.lbl_qtype.config(text=f"{q['type']}")
@@ -192,19 +231,15 @@ class QuizApp(tk.Tk):
         # Image handling: show if path provided and file exists
         self._photo_image_ref = None
         img_path = q.get("image", "")
-        if img_path:
-            # Expand user and relative paths
-            img_path = os.path.expanduser(img_path)
-            if not os.path.isabs(img_path):
-                # If the path is relative, make it relative to the CSV file location if possible
-                # We don't have the CSV path here; users should provide absolute paths ideally.
-                img_path = os.path.abspath(img_path)
 
-        if img_path and os.path.exists(img_path) and os.path.isfile(img_path):
+        # Resolve local / relative paths properly
+        resolved_img_path = self._resolve_image_path(img_path)
+
+        if resolved_img_path and os.path.exists(resolved_img_path) and os.path.isfile(resolved_img_path):
             try:
                 # Load image and scale to fit max dimensions
                 max_w, max_h = 760, 320  # maximum display area
-                img = Image.open(img_path)
+                img = Image.open(resolved_img_path)
                 img.thumbnail((max_w, max_h), Image.LANCZOS)
                 photo = ImageTk.PhotoImage(img)
                 self.lbl_image.config(image=photo)

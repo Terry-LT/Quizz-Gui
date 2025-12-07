@@ -194,6 +194,7 @@ class QuizApp(tk.Tk):
          - strip quotes and whitespace
          - if absolute -> return normalized absolute path
          - if relative -> resolve relative to CSV folder (if available), otherwise to cwd
+         - on non-Windows systems, convert backslashes to forward slashes first
          - return normalized path (or empty string if input empty)
         """
         if not img_path_raw:
@@ -204,6 +205,10 @@ class QuizApp(tk.Tk):
 
         # Expand user (~)
         img_path = os.path.expanduser(img_path)
+
+        # If not running on Windows, convert backslashes (windows separators) into forward slashes
+        if os.name != "nt":
+            img_path = img_path.replace("\\", "/")
 
         # Normalize separators (good for cross-platform)
         img_path = os.path.normpath(img_path)
